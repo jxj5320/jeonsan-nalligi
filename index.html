@@ -82,6 +82,42 @@
   }
   .modal .modal-actions{margin-top:16px; display:flex; gap:10px; width:100%; max-width:480px;}
   .modal button{flex:1; padding:14px;}
+  .btn-icon{
+    background:var(--panel2); border:1px solid var(--border); color:var(--text);
+    width:38px; height:38px; padding:0; border-radius:10px; font-size:17px;
+    display:flex; align-items:center; justify-content:center; margin-left:auto;
+  }
+  .title-row{display:flex; align-items:center; gap:8px;}
+  .settings-panel{
+    background:var(--panel); border-radius:16px; padding:18px; width:100%; max-width:440px;
+    max-height:85vh; overflow-y:auto;
+  }
+  .settings-panel h3{margin:0 0 4px; font-size:16px;}
+  .settings-panel .hint{color:var(--muted); font-size:12px; margin:0 0 14px; line-height:1.5;}
+  .field-group{margin-bottom:14px;}
+  .field-group label{display:block; font-size:13px; font-weight:600; margin-bottom:6px;}
+  .field-group .fhint{color:var(--muted); font-size:11.5px; margin-top:5px; line-height:1.5;}
+  .settings-panel input[type=text], .settings-panel input[type=password],
+  .settings-panel select, .settings-panel textarea{
+    width:100%; background:var(--panel2); border:1px solid var(--border); color:var(--text);
+    border-radius:10px; padding:11px 12px; font-size:15px; outline:none; font-family:inherit;
+  }
+  .settings-panel textarea{resize:vertical; min-height:52px; line-height:1.5;}
+  .settings-panel input:focus, .settings-panel select:focus, .settings-panel textarea:focus{border-color:var(--accent);}
+  .settings-actions{display:flex; gap:10px; margin-top:6px;}
+  .capture-frame{position:relative; width:100%; max-width:480px;}
+  .capture-frame canvas{width:100%; border-radius:12px; display:none;}
+  .capture-frame .spinner-wrap{
+    position:absolute; inset:0; background:rgba(0,0,0,.55); display:none;
+    align-items:center; justify-content:center; border-radius:12px; flex-direction:column; gap:10px;
+  }
+  .capture-frame .spinner-wrap.show{display:flex;}
+  .spinner{
+    width:32px; height:32px; border-radius:50%; border:3px solid rgba(255,255,255,.3);
+    border-top-color:#fff; animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .spinner-wrap span{color:#fff; font-size:13px;}
   .toast{
     position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
     background:#111827; color:#fff; padding:10px 16px; border-radius:20px; font-size:13px;
@@ -94,7 +130,10 @@
 </head>
 <body>
 
-<h1>📦 전산 날리기</h1>
+<div class="title-row">
+  <h1>📦 전산 날리기</h1>
+  <button class="btn-icon" id="btnSettings" title="설정" aria-label="설정">⚙️</button>
+</div>
 <p class="sub">토트사진 → 상품바코드 → 진열 로케이션 순서로 입력하면 인쇄용 이미지 한 장으로 합쳐줍니다.</p>
 
 <div class="card" data-idx="0">
@@ -138,15 +177,57 @@
 </div>
 
 <footer>
-  오프라인에서도 동작하는 순수 클라이언트 앱입니다. 입력값은 서버로 전송되지 않으며,<br>
-  새로고침하면 초기화됩니다. 카메라 스캔은 브라우저가 BarcodeDetector API를 지원해야 동작합니다.
+  바코드 생성은 서버 없이 동작하는 순수 클라이언트 기능입니다.<br>
+  카메라 스캔(📷)만 Claude Vision API를 호출하며, ⚙️ 설정에서 API 키 등록이 필요합니다.<br>
+  새로고침하면 입력값은 초기화됩니다(API 키/설정은 유지됩니다).
 </footer>
 
 <div class="modal" id="scanModal">
-  <div class="modal-label" id="scanLabel">스캔 중...</div>
-  <div class="scan-frame"><video id="scanVideo" playsinline autoplay muted></video></div>
+  <div class="modal-label" id="scanLabel">라벨을 네모 칸 안에 맞춰주세요</div>
+  <div class="scan-frame capture-frame">
+    <video id="scanVideo" playsinline autoplay muted></video>
+    <canvas id="captureCanvas"></canvas>
+    <div class="spinner-wrap" id="spinnerWrap"><div class="spinner"></div><span>인식 중...</span></div>
+  </div>
   <div class="modal-actions">
     <button class="btn-secondary" id="btnCancelScan">취소</button>
+    <button class="btn-primary" id="btnCapture" style="flex:1;">📸 촬영</button>
+  </div>
+</div>
+
+<div class="modal" id="settingsModal">
+  <div class="settings-panel">
+    <h3>⚙️ 인식 설정</h3>
+    <p class="hint">
+      손상되거나 여러 코드가 섞인 라벨도 정확히 읽기 위해 카메라 스캔은 Claude Vision API로 인식합니다.
+      기존에 쓰시던 다른 앱(토트+IBC 앱 등)과 같은 워크스페이스 API 키를 그대로 넣으셔도 됩니다.
+    </p>
+    <div class="field-group">
+      <label for="apiKeyInput">Anthropic API 키</label>
+      <input type="password" id="apiKeyInput" placeholder="sk-ant-...">
+      <div class="fhint">이 브라우저에만 저장됩니다(localStorage). 서버로 전송되지 않습니다.</div>
+    </div>
+    <div class="field-group">
+      <label for="modelSelect">인식 모델</label>
+      <select id="modelSelect">
+        <option value="claude-haiku-4-5">claude-haiku-4-5 (빠름, 기본)</option>
+        <option value="claude-sonnet-4-5">claude-sonnet-4-5 (더 정확함, 느림)</option>
+      </select>
+    </div>
+    <div class="field-group">
+      <label for="prefixInput">등록된 접두어 (우선 인식)</label>
+      <textarea id="prefixInput" rows="2" placeholder="예: GC-GT, GC-GP, 145-RCRT-11-, IBC"></textarea>
+      <div class="fhint">쉼표(,)로 구분해서 입력. 하이픈 위치가 라벨마다 달라도 문자+숫자 구성으로 인식합니다.</div>
+    </div>
+    <div class="field-group">
+      <label for="excludeInput">제외 키워드</label>
+      <textarea id="excludeInput" rows="1" placeholder="예: INC, YON"></textarea>
+      <div class="fhint">이 키워드가 포함된 코드는 인식 결과에서 제외됩니다.</div>
+    </div>
+    <div class="settings-actions">
+      <button class="btn-secondary" id="btnCloseSettings" style="flex:1;">닫기</button>
+      <button class="btn-primary" id="btnSaveSettings" style="flex:1;">저장</button>
+    </div>
   </div>
 </div>
 
@@ -387,21 +468,74 @@ document.getElementById("btnReset").addEventListener("click", function(){
   window.scrollTo({top:0, behavior:"smooth"});
 });
 
-/* ---------------- camera scan (native BarcodeDetector) ---------------- */
+/* =========================================================
+   Settings (API key / model / prefixes / exclusions)
+   Persisted in localStorage, same pattern as the tote-ibc-app
+   project so an existing workspace key can be reused as-is.
+   ========================================================= */
+var LS_KEYS = {
+  apiKey: "jn_api_key",
+  model: "jn_model",
+  prefixes: "jn_prefixes",
+  exclude: "jn_exclude"
+};
+var DEFAULT_PREFIXES = "GC-GT, GC-GP, 145-RCRT-11-, 145-RCRT-22-, 145-RCRT-33-, IBC, CT";
+var DEFAULT_EXCLUDE = "INC, YON";
+
+function loadSettings(){
+  return {
+    apiKey: localStorage.getItem(LS_KEYS.apiKey) || "",
+    model: localStorage.getItem(LS_KEYS.model) || "claude-haiku-4-5",
+    prefixes: localStorage.getItem(LS_KEYS.prefixes) !== null ? localStorage.getItem(LS_KEYS.prefixes) : DEFAULT_PREFIXES,
+    exclude: localStorage.getItem(LS_KEYS.exclude) !== null ? localStorage.getItem(LS_KEYS.exclude) : DEFAULT_EXCLUDE
+  };
+}
+
+var settingsModal = document.getElementById("settingsModal");
+var apiKeyInput = document.getElementById("apiKeyInput");
+var modelSelect = document.getElementById("modelSelect");
+var prefixInput = document.getElementById("prefixInput");
+var excludeInput = document.getElementById("excludeInput");
+
+function openSettings(){
+  var s = loadSettings();
+  apiKeyInput.value = s.apiKey;
+  modelSelect.value = s.model;
+  prefixInput.value = s.prefixes;
+  excludeInput.value = s.exclude;
+  settingsModal.classList.add("open");
+}
+function closeSettings(){ settingsModal.classList.remove("open"); }
+
+document.getElementById("btnSettings").addEventListener("click", openSettings);
+document.getElementById("btnCloseSettings").addEventListener("click", closeSettings);
+document.getElementById("btnSaveSettings").addEventListener("click", function(){
+  localStorage.setItem(LS_KEYS.apiKey, apiKeyInput.value.trim());
+  localStorage.setItem(LS_KEYS.model, modelSelect.value);
+  localStorage.setItem(LS_KEYS.prefixes, prefixInput.value.trim());
+  localStorage.setItem(LS_KEYS.exclude, excludeInput.value.trim());
+  closeSettings();
+  showToast("설정을 저장했습니다.");
+});
+
+/* =========================================================
+   Camera scan — capture a still photo, recognize with
+   Claude Vision. A plain barcode/QR decoder (e.g. the
+   BarcodeDetector API) only works on a clean, undamaged
+   symbol — the tote-ibc-app project ran into exactly that
+   wall with real warehouse labels (damaged prints, multiple
+   codes on one label) and moved to Claude Vision + a
+   priority-rule prompt to fix it. We reuse that same
+   approach here from the start instead of repeating it.
+   ========================================================= */
 var scanModal = document.getElementById("scanModal");
 var scanVideo = document.getElementById("scanVideo");
 var scanLabel = document.getElementById("scanLabel");
+var captureCanvas = document.getElementById("captureCanvas");
+var spinnerWrap = document.getElementById("spinnerWrap");
+var btnCapture = document.getElementById("btnCapture");
 var currentStream = null;
-var scanTimer = null;
 var scanningIdx = null;
-
-var SUPPORTS_DETECTOR = ("BarcodeDetector" in window);
-var detector = null;
-if (SUPPORTS_DETECTOR){
-  try{
-    detector = new BarcodeDetector({formats:["code_128","code_39","code_93","codabar","ean_13","ean_8","upc_a","upc_e","itf","qr_code"]});
-  } catch(e){ SUPPORTS_DETECTOR = false; }
-}
 
 document.querySelectorAll("[data-scan]").forEach(function(btn){
   btn.addEventListener("click", function(){
@@ -410,14 +544,22 @@ document.querySelectorAll("[data-scan]").forEach(function(btn){
   });
 });
 document.getElementById("btnCancelScan").addEventListener("click", stopScan);
+btnCapture.addEventListener("click", capturePhoto);
 
 async function startScan(idx){
-  if (!SUPPORTS_DETECTOR){
-    showToast("이 브라우저는 카메라 자동 인식을 지원하지 않습니다. 직접 입력해주세요.");
+  var s = loadSettings();
+  if (!s.apiKey){
+    showToast("먼저 ⚙️ 설정에서 API 키를 등록해주세요.");
+    openSettings();
     return;
   }
   scanningIdx = idx;
-  scanLabel.textContent = FIELD_LABELS[idx] + " 스캔 중...";
+  scanLabel.textContent = FIELD_LABELS[idx] + " — 라벨을 네모 칸 안에 맞춰주세요";
+  scanVideo.style.display = "block";
+  captureCanvas.style.display = "none";
+  spinnerWrap.classList.remove("show");
+  btnCapture.disabled = false;
+  btnCapture.textContent = "📸 촬영";
   scanModal.classList.add("open");
   try{
     currentStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}});
@@ -426,36 +568,119 @@ async function startScan(idx){
   } catch(e){
     showToast("카메라를 열 수 없습니다: " + e.message);
     stopScan();
-    return;
   }
-  scanTimer = setInterval(async function(){
-    if (!scanVideo.videoWidth) return;
-    try{
-      var codes = await detector.detect(scanVideo);
-      if (codes && codes.length){
-        onScanResult(codes[0].rawValue);
-      }
-    } catch(e){ /* ignore transient detect errors */ }
-  }, 300);
-}
-
-function onScanResult(value){
-  if (scanningIdx === null) return;
-  var idx = scanningIdx;
-  stopScan();
-  inputs[idx].value = value.trim();
-  renderField(idx);
-  showToast(FIELD_LABELS[idx] + " 인식됨: " + value.trim());
 }
 
 function stopScan(){
   scanModal.classList.remove("open");
-  if (scanTimer){ clearInterval(scanTimer); scanTimer = null; }
   if (currentStream){
     currentStream.getTracks().forEach(function(t){ t.stop(); });
     currentStream = null;
   }
   scanningIdx = null;
+}
+
+async function capturePhoto(){
+  if (scanningIdx === null || !scanVideo.videoWidth) return;
+  var idx = scanningIdx;
+
+  // downscale to a max edge of 1100px, matching the tote-ibc-app project's
+  // proven approach (keeps upload size/latency small without hurting recognition).
+  var maxEdge = 1100;
+  var vw = scanVideo.videoWidth, vh = scanVideo.videoHeight;
+  var scale = Math.min(1, maxEdge / Math.max(vw, vh));
+  var cw = Math.round(vw*scale), ch = Math.round(vh*scale);
+  captureCanvas.width = cw;
+  captureCanvas.height = ch;
+  var ctx = captureCanvas.getContext("2d");
+  ctx.drawImage(scanVideo, 0, 0, cw, ch);
+
+  scanVideo.style.display = "none";
+  captureCanvas.style.display = "block";
+  spinnerWrap.classList.add("show");
+  btnCapture.disabled = true;
+
+  var dataUrl = captureCanvas.toDataURL("image/jpeg", 0.85);
+  var base64 = dataUrl.split(",")[1];
+
+  try{
+    var value = await recognizeWithClaude(base64);
+    if (!value){
+      showToast("코드를 인식하지 못했습니다. 다시 촬영하거나 직접 입력해주세요.");
+      resetToLiveView();
+      return;
+    }
+    stopScan();
+    inputs[idx].value = value;
+    renderField(idx);
+    showToast(FIELD_LABELS[idx] + " 인식됨: " + value);
+  } catch(e){
+    showToast("인식 실패: " + e.message);
+    resetToLiveView();
+  }
+}
+
+function resetToLiveView(){
+  spinnerWrap.classList.remove("show");
+  scanVideo.style.display = "block";
+  captureCanvas.style.display = "none";
+  btnCapture.disabled = false;
+}
+
+function buildPrompt(prefixes, exclude){
+  var prefixList = prefixes ? prefixes.split(",").map(function(s){return s.trim();}).filter(Boolean).join(", ") : "(없음)";
+  var excludeList = exclude ? exclude.split(",").map(function(s){return s.trim();}).filter(Boolean).join(", ") : "(없음)";
+  return [
+    "이 사진 안에 있는 바코드/QR 라벨의 코드 텍스트를 정확히 추출해줘. 아래 우선순위 규칙을 순서대로 적용해라.",
+    "1. 다음 접두어로 시작하는 코드를 최우선으로 인식할 것: " + prefixList + ". 하이픈 위치는 라벨마다 다를 수 있으니 하이픈 오타에 흔들리지 말고 문자+숫자 구성으로 판단할 것.",
+    "2. 접두어 없이 바코드+QR만 나란히 인쇄된 흰색 선반/랙 위치 라벨(예: 2CM38-9-504)은 앞에 '145-'를 자동으로 붙여서 출력할 것.",
+    "3. 그 외 일반 상품 바코드는 접두어나 145- 없이 인쇄된 그대로 출력할 것.",
+    "4. 다음 키워드가 포함된 코드는 절대 후보로 고르지 말 것: " + excludeList + ".",
+    "5. 코드가 라벨 위에서 시각적으로 분리되어 인쇄된 경우(예: 'IBC' 글자와 일련번호가 다른 줄에 있거나, '1F'/'2F'/'B1' 같은 층/구역 표시가 번호와 떨어져 있는 경우) 절대 나누지 말고 반드시 하나의 코드로 합쳐서 출력할 것.",
+    "6. 사진 안에 여러 개의 코드가 보이면 위 규칙에 가장 잘 맞는 코드 딱 하나만 골라라.",
+    "7. 코드를 전혀 찾을 수 없으면 정확히 NONE 이라고만 출력할 것.",
+    "8. 다른 설명 없이 코드 텍스트(또는 NONE) 한 줄만 출력할 것. 공백이나 줄바꿈을 넣지 말 것."
+  ].join("\n");
+}
+
+async function recognizeWithClaude(base64Image){
+  var s = loadSettings();
+  var promptText = buildPrompt(s.prefixes, s.exclude);
+
+  var res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": s.apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify({
+      model: s.model,
+      max_tokens: 200,
+      messages: [{
+        role: "user",
+        content: [
+          {type:"image", source:{type:"base64", media_type:"image/jpeg", data:base64Image}},
+          {type:"text", text:promptText}
+        ]
+      }]
+    })
+  });
+
+  if (!res.ok){
+    var errBody = null;
+    try{ errBody = await res.json(); } catch(e){}
+    var msg = errBody && errBody.error && errBody.error.message ? errBody.error.message : ("HTTP " + res.status);
+    if (res.status === 401) msg = "API 키가 올바르지 않습니다. 설정에서 확인해주세요.";
+    throw new Error(msg);
+  }
+
+  var data = await res.json();
+  var text = (data.content && data.content[0] && data.content[0].text) ? data.content[0].text : "";
+  text = text.replace(/\s+/g, "").trim();
+  if (!text || text.toUpperCase() === "NONE") return null;
+  return text;
 }
 
 /* ---------------- toast ---------------- */

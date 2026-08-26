@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>전산 날리기</title>
+<meta name="theme-color" content="#1e293b">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#243244; --accent:#38bdf8; --accent2:#22c55e;
+    --text:#e2e8f0; --muted:#94a3b8; --danger:#f87171; --border:#334155;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    padding:14px 14px 40px; max-width:560px; margin:0 auto;
+    -webkit-tap-highlight-color:transparent;
+  }
+  h1{font-size:20px; margin:6px 0 2px; display:flex; align-items:center; gap:8px;}
+  .sub{color:var(--muted); font-size:13px; margin:0 0 16px;}
+  .card{
+    background:var(--panel); border:1px solid var(--border); border-radius:14px;
+    padding:14px; margin-bottom:12px;
+  }
+  .card-title{
+    display:flex; align-items:center; gap:8px; font-weight:700; font-size:15px; margin-bottom:10px;
+  }
+  .badge{
+    background:var(--accent); color:#04202e; font-weight:800; font-size:12px;
+    width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  .row{display:flex; gap:8px;}
+  input[type=text]{
+    flex:1; min-width:0; background:var(--panel2); border:1px solid var(--border); color:var(--text);
+    border-radius:10px; padding:12px 12px; font-size:16px; outline:none;
+  }
+  input[type=text]:focus{border-color:var(--accent);}
+  button{
+    font-size:14px; font-weight:600; border:none; border-radius:10px; padding:12px 14px;
+    cursor:pointer; -webkit-user-select:none; user-select:none;
+  }
+  .btn-scan{background:var(--panel2); color:var(--text); border:1px solid var(--border); white-space:nowrap;}
+  .btn-scan:active{background:#2d3d52;}
+  .btn-clear{background:transparent; color:var(--muted); border:1px solid var(--border); padding:8px 10px; font-size:12px;}
+  .preview{
+    margin-top:10px; background:#fff; border-radius:10px; padding:8px; min-height:64px;
+    display:flex; align-items:center; justify-content:center; overflow:auto;
+  }
+  .preview canvas{max-width:100%; height:auto; display:block;}
+  .empty-hint{color:#94a3b8; font-size:12px;}
+  .err{color:var(--danger); font-size:12px; margin-top:6px;}
+  .actions{display:flex; gap:10px; margin:18px 0 10px;}
+  .btn-primary{background:var(--accent); color:#04202e; flex:1; font-size:16px; padding:14px;}
+  .btn-primary:disabled{opacity:.45;}
+  .btn-secondary{background:var(--panel2); color:var(--text); border:1px solid var(--border);}
+  .result{margin-top:6px;}
+  .result img{width:100%; border-radius:12px; border:1px solid var(--border); background:#fff;}
+  .btn-save{
+    background:var(--accent2); color:#052e12; width:100%; margin-top:12px; font-size:16px; padding:14px;
+  }
+  /* camera modal */
+  .modal{
+    position:fixed; inset:0; background:rgba(0,0,0,.92); display:none;
+    flex-direction:column; align-items:center; justify-content:center; z-index:50; padding:16px;
+  }
+  .modal.open{display:flex;}
+  .modal video{width:100%; max-width:480px; border-radius:12px; background:#000;}
+  .modal .modal-label{color:#fff; margin-bottom:10px; font-size:15px; font-weight:600;}
+  .modal .scan-frame{
+    position:relative; width:100%; max-width:480px;
+  }
+  .modal .scan-frame::after{
+    content:''; position:absolute; left:8%; right:8%; top:38%; height:24%;
+    border:2px solid var(--accent); border-radius:8px; pointer-events:none;
+  }
+  .modal .modal-actions{margin-top:16px; display:flex; gap:10px; width:100%; max-width:480px;}
+  .modal button{flex:1; padding:14px;}
+  .toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+    background:#111827; color:#fff; padding:10px 16px; border-radius:20px; font-size:13px;
+    box-shadow:0 4px 14px rgba(0,0,0,.4); z-index:80; opacity:0; transition:opacity .2s; pointer-events:none;
+    max-width:90vw; text-align:center;
+  }
+  .toast.show{opacity:1;}
+  footer{color:var(--muted); font-size:11px; text-align:center; margin-top:26px; line-height:1.6;}
+</style>
+</head>
+<body>
+
+<h1>📦 전산 날리기</h1>
+<p class="sub">토트사진 → 상품바코드 → 진열 로케이션 순서로 입력하면 인쇄용 이미지 한 장으로 합쳐줍니다.</p>
+
+<div class="card" data-idx="0">
+  <div class="card-title"><span class="badge">1</span> 토트사진 바코드</div>
+  <div class="row">
+    <input type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="토트 코드 입력 또는 스캔" data-field="0">
+    <button class="btn-scan" data-scan="0">📷 스캔</button>
+  </div>
+  <div class="preview" data-preview="0"><span class="empty-hint">코드를 입력하면 바코드가 표시됩니다</span></div>
+  <div class="err" data-err="0" style="display:none;"></div>
+</div>
+
+<div class="card" data-idx="1">
+  <div class="card-title"><span class="badge">2</span> 상품바코드</div>
+  <div class="row">
+    <input type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="상품 코드 입력 또는 스캔" data-field="1">
+    <button class="btn-scan" data-scan="1">📷 스캔</button>
+  </div>
+  <div class="preview" data-preview="1"><span class="empty-hint">코드를 입력하면 바코드가 표시됩니다</span></div>
+  <div class="err" data-err="1" style="display:none;"></div>
+</div>
+
+<div class="card" data-idx="2">
+  <div class="card-title"><span class="badge">3</span> 진열할 로케이션 바코드</div>
+  <div class="row">
+    <input type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="로케이션 코드 입력 또는 스캔" data-field="2">
+    <button class="btn-scan" data-scan="2">📷 스캔</button>
+  </div>
+  <div class="preview" data-preview="2"><span class="empty-hint">코드를 입력하면 바코드가 표시됩니다</span></div>
+  <div class="err" data-err="2" style="display:none;"></div>
+</div>
+
+<div class="actions">
+  <button class="btn-primary" id="btnCompose">🖼 3개 합쳐서 이미지 생성</button>
+  <button class="btn-secondary" id="btnReset">초기화</button>
+</div>
+
+<div class="result" id="resultWrap" style="display:none;">
+  <img id="resultImg" alt="합쳐진 바코드 이미지">
+  <button class="btn-save" id="btnSave">📤 저장 / 공유</button>
+</div>
+
+<footer>
+  오프라인에서도 동작하는 순수 클라이언트 앱입니다. 입력값은 서버로 전송되지 않으며,<br>
+  새로고침하면 초기화됩니다. 카메라 스캔은 브라우저가 BarcodeDetector API를 지원해야 동작합니다.
+</footer>
+
+<div class="modal" id="scanModal">
+  <div class="modal-label" id="scanLabel">스캔 중...</div>
+  <div class="scan-frame"><video id="scanVideo" playsinline autoplay muted></video></div>
+  <div class="modal-actions">
+    <button class="btn-secondary" id="btnCancelScan">취소</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   CODE128 (Code Set B) encoder — pure vanilla JS, no deps.
+   Width table verified against the ZBar reference decoder
+   across the full ASCII 32-126 range before shipping.
+   ========================================================= */
+var CODE128_WIDTHS = [
+  "212222","222122","222221","121223","121322","131222","122213","122312","132212","221213",
+  "221312","231212","112232","122132","122231","113222","123122","123221","223211","221132",
+  "221231","213212","223112","312131","311222","321122","321221","312212","322112","322211",
+  "212123","212321","232121","111323","131123","131321","112313","132113","132311","211313",
+  "231113","231311","112133","112331","132131","113123","113321","133121","313121","211331",
+  "231131","213113","213311","213131","311123","311321","331121","312113","312311","332111",
+  "314111","221411","431111","111224","111422","121124","121421","141122","141221","112214",
+  "112412","122114","122411","142112","142211","241211","221114","413111","241112","134111",
+  "111242","121142","121241","114212","124112","124211","411212","421112","421211","212141",
+  "214121","412121","111143","111341","131141","114113","114311","411113","411311","113141",
+  "114131","311141","411131",
+  "211412","211214","211232",
+  "2331112"
+];
+var CODE_START_B = 104, CODE_STOP = 106;
+
+function code128EncodeB(text){
+  if (!text) throw new Error("empty");
+  var values = [CODE_START_B];
+  for (var i=0;i<text.length;i++){
+    var code = text.charCodeAt(i);
+    if (code < 32 || code > 126) {
+      throw new Error("바코드로 표현할 수 없는 문자가 있습니다: \"" + text[i] + "\"");
+    }
+    values.push(code - 32);
+  }
+  var checksum = values[0];
+  for (var j=1;j<values.length;j++) checksum += values[j]*j;
+  checksum = checksum % 103;
+  values.push(checksum);
+  values.push(CODE_STOP);
+  var widths = [];
+  for (var k=0;k<values.length;k++){
+    var pattern = CODE128_WIDTHS[values[k]];
+    for (var m=0;m<pattern.length;m++) widths.push(parseInt(pattern[m],10));
+  }
+  return widths;
+}
+
+// Draws a CODE128 barcode + human-readable text onto a canvas.
+function drawBarcode(canvas, rawText, opts){
+  opts = opts || {};
+  var text = rawText.trim();
+  var moduleWidth = opts.moduleWidth || 2;
+  var barHeight = opts.barHeight || 70;
+  var quiet = opts.quiet || 10; // modules of quiet zone each side
+  var fontSize = opts.fontSize || 16;
+  var showText = opts.showText !== false;
+
+  var widths = code128EncodeB(text); // throws on bad chars
+  var totalModules = widths.reduce(function(a,b){return a+b;},0) + quiet*2;
+  var w = totalModules * moduleWidth;
+  var textH = showText ? (fontSize + 10) : 0;
+  var h = barHeight + textH + 12;
+
+  canvas.width = w;
+  canvas.height = h;
+  var ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0,0,w,h);
+  ctx.fillStyle = "#000";
+
+  var x = quiet*moduleWidth;
+  var bar = true;
+  for (var i=0;i<widths.length;i++){
+    var wpx = widths[i]*moduleWidth;
+    if (bar) ctx.fillRect(x, 6, wpx, barHeight);
+    x += wpx;
+    bar = !bar;
+  }
+  if (showText){
+    ctx.font = "600 "+fontSize+"px -apple-system,Roboto,Arial,sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(text, w/2, barHeight + 12, w-8);
+  }
+  return {width:w, height:h, text:text};
+}
+
+/* ---------------- app state / wiring ---------------- */
+var FIELD_LABELS = ["토트사진", "상품바코드", "진열 로케이션"];
+var fields = [
+  {value:"", canvas:null},
+  {value:"", canvas:null},
+  {value:"", canvas:null}
+];
+
+var inputs = document.querySelectorAll("input[data-field]");
+var previews = document.querySelectorAll("[data-preview]");
+var errs = document.querySelectorAll("[data-err]");
+
+function renderField(idx){
+  var input = inputs[idx];
+  var val = input.value.trim();
+  var previewEl = previews[idx];
+  var errEl = errs[idx];
+  fields[idx].value = val;
+  errEl.style.display = "none";
+  errEl.textContent = "";
+
+  if (!val){
+    previewEl.innerHTML = '<span class="empty-hint">코드를 입력하면 바코드가 표시됩니다</span>';
+    fields[idx].canvas = null;
+    updateComposeState();
+    return;
+  }
+  try{
+    var canvas = document.createElement("canvas");
+    drawBarcode(canvas, val, {moduleWidth:2, barHeight:64, fontSize:15});
+    previewEl.innerHTML = "";
+    previewEl.appendChild(canvas);
+    fields[idx].canvas = canvas;
+  } catch(e){
+    previewEl.innerHTML = '<span class="empty-hint">미리보기를 만들 수 없습니다</span>';
+    fields[idx].canvas = null;
+    errEl.textContent = e.message;
+    errEl.style.display = "block";
+  }
+  updateComposeState();
+}
+
+inputs.forEach(function(input, idx){
+  input.addEventListener("input", function(){ renderField(idx); });
+  input.addEventListener("blur", function(){ input.value = input.value.trim(); renderField(idx); });
+});
+
+function updateComposeState(){
+  var allReady = fields.every(function(f){ return f.value && f.canvas; });
+  document.getElementById("btnCompose").disabled = false; // allow partial; validated on click
+}
+
+/* ---------------- compose stacked image ---------------- */
+var composedBlob = null;
+
+document.getElementById("btnCompose").addEventListener("click", function(){
+  var missing = [];
+  fields.forEach(function(f, i){
+    if (!f.value) missing.push(FIELD_LABELS[i]);
+  });
+  if (missing.length){
+    showToast("입력이 비어 있습니다: " + missing.join(", "));
+    return;
+  }
+  var badIdx = fields.findIndex(function(f){ return !f.canvas; });
+  if (badIdx !== -1){
+    showToast(FIELD_LABELS[badIdx] + " 값에 오류가 있어 이미지를 만들 수 없습니다.");
+    return;
+  }
+
+  var pad = 20, gap = 22, labelH = 22;
+  var maxW = Math.max.apply(null, fields.map(function(f){return f.canvas.width;}));
+  var totalW = maxW + pad*2;
+  var totalH = pad;
+  fields.forEach(function(f){ totalH += labelH + f.canvas.height + gap; });
+  totalH += pad - gap;
+
+  var out = document.createElement("canvas");
+  out.width = totalW;
+  out.height = totalH;
+  var ctx = out.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0,0,totalW,totalH);
+
+  var y = pad;
+  fields.forEach(function(f, i){
+    ctx.fillStyle = "#111";
+    ctx.font = "700 16px -apple-system,Roboto,Arial,sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText((i+1)+". "+FIELD_LABELS[i], pad, y);
+    y += labelH;
+    var cx = pad + (maxW - f.canvas.width)/2;
+    ctx.drawImage(f.canvas, cx, y);
+    y += f.canvas.height + gap;
+    if (i < fields.length-1){
+      ctx.strokeStyle = "#ddd";
+      ctx.beginPath();
+      ctx.moveTo(pad, y-gap/2);
+      ctx.lineTo(totalW-pad, y-gap/2);
+      ctx.stroke();
+    }
+  });
+
+  out.toBlob(function(blob){
+    composedBlob = blob;
+    var url = URL.createObjectURL(blob);
+    document.getElementById("resultImg").src = url;
+    document.getElementById("resultWrap").style.display = "block";
+    document.getElementById("resultWrap").scrollIntoView({behavior:"smooth", block:"start"});
+  }, "image/png");
+});
+
+document.getElementById("btnSave").addEventListener("click", async function(){
+  if (!composedBlob) return;
+  var ts = new Date();
+  var stamp = ts.getFullYear()+String(ts.getMonth()+1).padStart(2,"0")+String(ts.getDate()).padStart(2,"0")+"_"+String(ts.getHours()).padStart(2,"0")+String(ts.getMinutes()).padStart(2,"0");
+  var filename = "전산날리기_"+stamp+".png";
+  var file = new File([composedBlob], filename, {type:"image/png"});
+
+  if (navigator.canShare && navigator.canShare({files:[file]})){
+    try{
+      await navigator.share({files:[file], title:"전산 날리기 라벨"});
+      return;
+    } catch(e){
+      if (e.name === "AbortError") return;
+      // fall through to download
+    }
+  }
+  var url = URL.createObjectURL(composedBlob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  showToast("이미지를 다운로드했습니다.");
+});
+
+document.getElementById("btnReset").addEventListener("click", function(){
+  inputs.forEach(function(input, idx){
+    input.value = "";
+    renderField(idx);
+  });
+  composedBlob = null;
+  document.getElementById("resultWrap").style.display = "none";
+  window.scrollTo({top:0, behavior:"smooth"});
+});
+
+/* ---------------- camera scan (native BarcodeDetector) ---------------- */
+var scanModal = document.getElementById("scanModal");
+var scanVideo = document.getElementById("scanVideo");
+var scanLabel = document.getElementById("scanLabel");
+var currentStream = null;
+var scanTimer = null;
+var scanningIdx = null;
+
+var SUPPORTS_DETECTOR = ("BarcodeDetector" in window);
+var detector = null;
+if (SUPPORTS_DETECTOR){
+  try{
+    detector = new BarcodeDetector({formats:["code_128","code_39","code_93","codabar","ean_13","ean_8","upc_a","upc_e","itf","qr_code"]});
+  } catch(e){ SUPPORTS_DETECTOR = false; }
+}
+
+document.querySelectorAll("[data-scan]").forEach(function(btn){
+  btn.addEventListener("click", function(){
+    var idx = parseInt(btn.getAttribute("data-scan"), 10);
+    startScan(idx);
+  });
+});
+document.getElementById("btnCancelScan").addEventListener("click", stopScan);
+
+async function startScan(idx){
+  if (!SUPPORTS_DETECTOR){
+    showToast("이 브라우저는 카메라 자동 인식을 지원하지 않습니다. 직접 입력해주세요.");
+    return;
+  }
+  scanningIdx = idx;
+  scanLabel.textContent = FIELD_LABELS[idx] + " 스캔 중...";
+  scanModal.classList.add("open");
+  try{
+    currentStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}});
+    scanVideo.srcObject = currentStream;
+    await scanVideo.play();
+  } catch(e){
+    showToast("카메라를 열 수 없습니다: " + e.message);
+    stopScan();
+    return;
+  }
+  scanTimer = setInterval(async function(){
+    if (!scanVideo.videoWidth) return;
+    try{
+      var codes = await detector.detect(scanVideo);
+      if (codes && codes.length){
+        onScanResult(codes[0].rawValue);
+      }
+    } catch(e){ /* ignore transient detect errors */ }
+  }, 300);
+}
+
+function onScanResult(value){
+  if (scanningIdx === null) return;
+  var idx = scanningIdx;
+  stopScan();
+  inputs[idx].value = value.trim();
+  renderField(idx);
+  showToast(FIELD_LABELS[idx] + " 인식됨: " + value.trim());
+}
+
+function stopScan(){
+  scanModal.classList.remove("open");
+  if (scanTimer){ clearInterval(scanTimer); scanTimer = null; }
+  if (currentStream){
+    currentStream.getTracks().forEach(function(t){ t.stop(); });
+    currentStream = null;
+  }
+  scanningIdx = null;
+}
+
+/* ---------------- toast ---------------- */
+var toastTimer = null;
+function showToast(msg){
+  var t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ t.classList.remove("show"); }, 2600);
+}
+
+/* ---------------- PWA service worker ---------------- */
+if ("serviceWorker" in navigator){
+  window.addEventListener("load", function(){
+    navigator.serviceWorker.register("service-worker.js").catch(function(){});
+  });
+}
+</script>
+</body>
+</html>

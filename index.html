@@ -36,7 +36,10 @@
     width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center;
     flex-shrink:0;
   }
-  .row{display:flex; gap:8px;}
+  .row{display:flex; gap:8px; flex-wrap:wrap;}
+  .row.input-row input[type=text]{flex-basis:100%;}
+  .row.btn-row{margin-top:8px;}
+  .row.btn-row button{flex:1;}
   input[type=text]{
     flex:1; min-width:0; background:var(--panel2); border:1px solid var(--border); color:var(--text);
     border-radius:10px; padding:12px 12px; font-size:16px; outline:none;
@@ -138,30 +141,42 @@
 
 <div class="card" data-idx="0">
   <div class="card-title"><span class="badge">1</span> 토트사진 바코드</div>
-  <div class="row">
-    <input type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="토트 코드 입력 또는 스캔" data-field="0">
-    <button class="btn-scan" data-scan="0">📷 스캔</button>
+  <div class="row input-row">
+    <input type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="토트 코드 입력 또는 스캔/첨부" data-field="0">
   </div>
+  <div class="row btn-row">
+    <button class="btn-scan" data-scan="0">📷 촬영</button>
+    <button class="btn-scan" data-attach="0">🖼 사진 첨부</button>
+  </div>
+  <input type="file" accept="image/*" data-file="0" style="display:none;">
   <div class="preview" data-preview="0"><span class="empty-hint">코드를 입력하면 바코드가 표시됩니다</span></div>
   <div class="err" data-err="0" style="display:none;"></div>
 </div>
 
 <div class="card" data-idx="1">
   <div class="card-title"><span class="badge">2</span> 상품바코드</div>
-  <div class="row">
-    <input type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="상품 코드 입력 또는 스캔" data-field="1">
-    <button class="btn-scan" data-scan="1">📷 스캔</button>
+  <div class="row input-row">
+    <input type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="상품 코드 입력 또는 스캔/첨부" data-field="1">
   </div>
+  <div class="row btn-row">
+    <button class="btn-scan" data-scan="1">📷 촬영</button>
+    <button class="btn-scan" data-attach="1">🖼 사진 첨부</button>
+  </div>
+  <input type="file" accept="image/*" data-file="1" style="display:none;">
   <div class="preview" data-preview="1"><span class="empty-hint">코드를 입력하면 바코드가 표시됩니다</span></div>
   <div class="err" data-err="1" style="display:none;"></div>
 </div>
 
 <div class="card" data-idx="2">
   <div class="card-title"><span class="badge">3</span> 진열할 로케이션 바코드</div>
-  <div class="row">
-    <input type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="로케이션 코드 입력 또는 스캔" data-field="2">
-    <button class="btn-scan" data-scan="2">📷 스캔</button>
+  <div class="row input-row">
+    <input type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="로케이션 코드 입력 또는 스캔/첨부" data-field="2">
   </div>
+  <div class="row btn-row">
+    <button class="btn-scan" data-scan="2">📷 촬영</button>
+    <button class="btn-scan" data-attach="2">🖼 사진 첨부</button>
+  </div>
+  <input type="file" accept="image/*" data-file="2" style="display:none;">
   <div class="preview" data-preview="2"><span class="empty-hint">코드를 입력하면 바코드가 표시됩니다</span></div>
   <div class="err" data-err="2" style="display:none;"></div>
 </div>
@@ -178,7 +193,8 @@
 
 <footer>
   바코드 생성은 서버 없이 동작하는 순수 클라이언트 기능입니다.<br>
-  카메라 스캔(📷)만 Claude Vision API를 호출하며, ⚙️ 설정에서 API 키 등록이 필요합니다.<br>
+  촬영(📷)과 사진 첨부(🖼)만 Claude Vision API를 호출하며, ⚙️ 설정에서 API 키 등록이 필요합니다.<br>
+  이미 찍어둔 낡은 바코드 사진이나 "145-"/"GC-" 같은 텍스트 사진을 첨부해도 새 바코드로 만들 수 있습니다.<br>
   새로고침하면 입력값은 초기화됩니다(API 키/설정은 유지됩니다).
 </footer>
 
@@ -625,6 +641,73 @@ function resetToLiveView(){
   scanVideo.style.display = "block";
   captureCanvas.style.display = "none";
   btnCapture.disabled = false;
+}
+
+/* =========================================================
+   Attach an existing photo (from the gallery) instead of
+   using the live camera — e.g. a photo already taken of a
+   worn-out barcode, or a close-up of printed text starting
+   with "145-" or "GC-". Same Vision recognition pipeline as
+   the live capture flow, just a different image source.
+   Deliberately no `capture` attribute on the file input —
+   that would force the camera open instead of the gallery
+   picker (a bug the tote-ibc-app project already hit once).
+   ========================================================= */
+document.querySelectorAll("[data-attach]").forEach(function(btn){
+  btn.addEventListener("click", function(){
+    var idx = parseInt(btn.getAttribute("data-attach"), 10);
+    document.querySelector('input[type=file][data-file="'+idx+'"]').click();
+  });
+});
+
+document.querySelectorAll("input[type=file][data-file]").forEach(function(fileInput){
+  fileInput.addEventListener("change", function(){
+    var idx = parseInt(fileInput.getAttribute("data-file"), 10);
+    var file = fileInput.files && fileInput.files[0];
+    fileInput.value = ""; // allow re-selecting the same file next time
+    if (file) handleAttachedImage(idx, file);
+  });
+});
+
+function downscaleImageFileToBase64(file, maxEdge, quality){
+  return new Promise(function(resolve, reject){
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function(){
+      URL.revokeObjectURL(url);
+      var scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+      var cw = Math.round(img.width*scale), ch = Math.round(img.height*scale);
+      var canvas = document.createElement("canvas");
+      canvas.width = cw; canvas.height = ch;
+      canvas.getContext("2d").drawImage(img, 0, 0, cw, ch);
+      resolve(canvas.toDataURL("image/jpeg", quality).split(",")[1]);
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("이미지를 불러올 수 없습니다.")); };
+    img.src = url;
+  });
+}
+
+async function handleAttachedImage(idx, file){
+  var s = loadSettings();
+  if (!s.apiKey){
+    showToast("먼저 ⚙️ 설정에서 API 키를 등록해주세요.");
+    openSettings();
+    return;
+  }
+  showToast(FIELD_LABELS[idx] + " 사진 인식 중...");
+  try{
+    var base64 = await downscaleImageFileToBase64(file, 1100, 0.85);
+    var value = await recognizeWithClaude(base64);
+    if (!value){
+      showToast("코드를 인식하지 못했습니다. 다른 사진을 시도하거나 직접 입력해주세요.");
+      return;
+    }
+    inputs[idx].value = value;
+    renderField(idx);
+    showToast(FIELD_LABELS[idx] + " 인식됨: " + value);
+  } catch(e){
+    showToast("인식 실패: " + e.message);
+  }
 }
 
 function buildPrompt(prefixes, exclude){
